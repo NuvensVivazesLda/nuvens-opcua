@@ -45,6 +45,10 @@ def on_poll(notification):
                                 values_to_send.append(value)
                         # print('INFO: {} : Updating device data...'.format(datetime.datetime.now()))
                         # device.device_start()
+                    elif rec.get('message').get('payload').get('action') == 'refresh':
+                        device.device_start()
+                        return rec['message']['payload']
+
                 # return rec['message']['payload']
         device.set_device_values(values_to_send)
     return True
