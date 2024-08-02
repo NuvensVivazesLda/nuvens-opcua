@@ -1,5 +1,6 @@
 from config import config
 import json, time
+import syslog
 
 time_sleep = 1.0
 
@@ -17,9 +18,11 @@ def get_result(message):
 
 def wait_connection():
     global time_sleep
-    print('INFO: Retry connection in {} sec'.format(str(time_sleep)))
+    syslog.syslog(syslog.LOG_INFO, 'INFO: Retry connection in {} sec'.format(str(time_sleep)))
     time.sleep(time_sleep)
     time_sleep = time_sleep * 2
+    if time_sleep > 64:
+        reset_time_connection()
 
 
 def reset_time_connection():

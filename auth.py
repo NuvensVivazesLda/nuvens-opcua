@@ -2,6 +2,7 @@
 import requests
 import helpers
 from config import config
+import syslog
 
 user = {
     'uid': 0,
@@ -29,13 +30,13 @@ def login():
         user['name'] = user_data.get('name')
         user['session_id'] = req.cookies["session_id"]
 
-        print('------------------------------------------------------')
-        print('LOGIN [OK]')
-        print('id: {}'.format(user['uid']))
-        print('name: {}'.format(user['name']))
-        print('session_id: {}'.format(user['session_id']))
-        print('------------------------------------------------------')
-        helpers.reset_time_connection()
+        syslog.syslog(syslog.LOG_INFO, '------------------------------------------------------')
+        syslog.syslog(syslog.LOG_INFO, 'LOGIN [OK]')
+        syslog.syslog(syslog.LOG_INFO, 'id: {}'.format(user['uid']))
+        syslog.syslog(syslog.LOG_INFO, 'name: {}'.format(user['name']))
+        syslog.syslog(syslog.LOG_INFO, 'session_id: {}'.format(user['session_id']))
+        syslog.syslog(syslog.LOG_INFO, '------------------------------------------------------')
+        #helpers.reset_time_connection()
         return True
     else:
         return False

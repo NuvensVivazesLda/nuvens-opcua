@@ -1,41 +1,90 @@
+import datetime
+import time
+
 import device
+import helpers
 from config import config
 from opcua import Client, ua
+import syslog
 
-client = Client(config['OPC_SERVER'])
+client = Client(url=config['OPC_SERVER'])
+
 node_list = []
+opc_connected = False
+
+def start():
+    try:
+        if not get_status():
+            return False
+        syslog.syslog(syslog.LOG_INFO, '------------------------------------------------------')
+        syslog.syslog(syslog.LOG_INFO, 'OPC-UA SERVER [OK]')
+        syslog.syslog(syslog.LOG_INFO, 'SERVER URL: {}'.format(config['OPC_SERVER']))
+        return True
+    except Exception as e:
+        syslog.syslog(syslog.LOG_INFO, e)
+        return False
+
+def connect():
+    global opc_connected
+    try:
+        client.connect()
+        #syslog.syslog(syslog.LOG_INFO, 'INFO : connecting socket opc service...')
+        opc_connected = True
+        return True
+    except:
+        syslog.syslog(syslog.LOG_INFO, 'ERROR: Try connect opc again')
+        time.sleep(1)
+        connect()
+
+def disconnect():
+    try:
+        client.disconnect()
+        #syslog.syslog(syslog.LOG_INFO, 'INFO : disconnecting socket opc service...')
+        opc_connected = False
+    except Exception as e:
+        syslog.syslog(syslog.LOG_INFO, e)
 
 
 def get_status():
     try:
-        client.connect()
+        connect()
         root = client.get_root_node()
         return root if root else False
-    except:
+    except Exception as e:
+        syslog.syslog(syslog.LOG_INFO, e)
         return False
     finally:
-        client.disconnect()
-
+        disconnect()
 
 def delete_node_list():
     global node_list
     node_list = []
 
+def check_type(type):
+    if type and type == 'str':
+        return 's'
+    else:
+        return 'i'
+
 def update_values():
+    syslog.syslog(syslog.LOG_INFO, 'INFO : OPC-ua, update values')
+    if not get_status():
+        return False
     delete_node_list()
     try:
-        client.connect()
+        connect()
         for node in device.device['data']:
             if node.get('namespace') and node.get('identifier'):
-                nd = client.get_node("ns={};i={}".format(node.get('namespace'), node.get('identifier')))
+                #syslog.syslog(syslog.LOG_INFO, "ns={};{}={}".format(node.get('namespace'), check_type(node.get('variable_type')), node.get('identifier')))
+                nd = client.get_node("ns={};{}={}".format(node.get('namespace'), check_type(node.get('variable_type')), node.get('identifier')))
                 if nd.get_type_definition():
                     node_list.append({
                         'type':       'object' if nd.get_node_class() == ua.NodeClass.Object else 'variable',
                         'name':       nd.get_display_name().Text,
                         'namespace':  nd.nodeid.NamespaceIndex,
                         'identifier': nd.nodeid.Identifier,
-                        'parent':     nd.get_parent().get_display_name().Text,
-                        'value':      nd.get_value(),
+                        #'parent':     nd.get_parent().get_display_name().Text,
+                        'value':      nd.get_value()
                     })
                 else:
                     node_list.append({
@@ -46,123 +95,53 @@ def update_values():
                         'parent':     None,
                         'value':      None,
                     })
-    except:
+    except Exception as e:
+        syslog.syslog(syslog.LOG_INFO, e)
+        #client.disconnect()
         return False
     finally:
-        client.disconnect()
+        disconnect()
 
-        # def browse_recursive(node):
-        #     for childId in node.get_children():
-        #         ch = client.get_node(childId)
-        #         # print(level, ch.get_display_name().Text, ch)
-        #         if ch.get_node_class() == ua.NodeClass.Object:
-        #             object_list.append({
-        #                 'type': 'object',
-        #                 'name': ch.get_display_name().Text,
-        #                 'namespace': str(ch.nodeid.NamespaceIndex),
-        #                 'identifier': str(ch.nodeid.Identifier),
-        #                 'parent': ch.get_parent().get_display_name().Text,
-        #                 'parent_namespace': str(ch.get_parent().nodeid.NamespaceIndex),
-        #                 'parent_identifier': str(ch.get_parent().nodeid.Identifier),
-        #                  })
-        #             # print('OBJECT: ', ch.get_display_name().Text)
-        #             browse_recursive(ch)
-        #         elif ch.get_node_class() == ua.NodeClass.Variable:
-        #
-        #             # print(value)
-        #             object_list.append({
-        #                 'type':       'variable',
-        #                 'name':       ch.get_display_name().Text,
-        #                 'namespace':  ch.nodeid.NamespaceIndex,
-        #                 'identifier': ch.nodeid.Identifier,
-        #                 'parent': ch.get_parent().get_display_name().Text,
-        #                 'parent_namespace':  str(ch.get_parent().nodeid.NamespaceIndex),
-        #                 'parent_identifier': str(ch.get_parent().nodeid.Identifier),
-        #                 'value': ch.get_value() if type(ch.get_value()) in [float, str, bool, int] else None
-        #             })
-                    # print('   |   ', ch.get_display_name().Text, ch.nodeid.NamespaceIndex, ch.nodeid.Identifier, ch.get_value())
-
-
-
-                    # if ch.get_display_name().Text in ['Simulation', 'Objects']:
-                    #     browse_recursive(ch)
-                # elif ch.get_node_class() == ua.NodeClass.Variable:
-                #     print(' --| ', "{bn} has value {val}".format(
-                #                     bn=ch.get_browse_name(),
-                #                     val=str(ch.get_value()))
-                #                 )
-                # if ch.get_node_class() == ua.NodeClass.Object:
-                #     browse_recursive(ch)
-                # elif ch.get_node_class() == ua.NodeClass.Variable:
-                #     try:
-                #         print("{bn} has value {val}".format(
-                #             bn=ch.get_browse_name(),
-                #             val=str(ch.get_value()))
-                #         )
-                #     # except ua.uaerrors._auto.BadWaitingForInitialData:
-                #     except ua.UaStatusCodeError as e:
-                #         print(e)
-                        # pass
-
-        # browse_recursive(root)
-        # return object_list
-
-        # root = client.get_root_node()
-        # print("Objects node is: ", root)
-        # objects = client.get_objects_node()
-        # print("Objects node is: ", objects)
-        # print("Children of root are: ", root.get_children())
-        #
-        # # for nod in root.get_children():
-        # objects = client.get_objects_node()
-        # print(objects)
-        # print(objects.get_variables())
-        # print("childs og objects are: ", objects.get_children())
-        # print(objects.get)
-        # for n  in client:
-        #     print(n.get_variables())
-            # for n in nod.get_children():
-            #     print()
-            #     print(' -- ' + str(n))
-
-        # a = client.get_node("ns=3;i=1007")
-        # # print(a)
-        # value = a.get_value()
-        #
-        # # a.set_value(ua.Variant([23], ua.VariantType.Int64)) #set node value using explicit data type
-        # value = value * 2
-        # a.set_value(value) # set node value using implicit data type
-        # # print(value)
-
-def read_value(namespace, identifier):
+def read_value(namespace, identifier, type):
+    syslog.syslog(syslog.LOG_INFO, 'INFO : {} : OPC-ua, read values'.format(datetime.datetime.now()))
+    if not get_status():
+        return False
     try:
-        client.connect()
-        nd = client.get_node("ns={};i={}".format(namespace, identifier))
+        connect()
+        nd = client.get_node("ns={};{}={}".format(namespace, check_type(type), identifier))
         if nd.get_type_definition():
             return {
                 'type': 'object' if nd.get_node_class() == ua.NodeClass.Object else 'variable',
                 'name': nd.get_display_name().Text,
                 'namespace': nd.nodeid.NamespaceIndex,
-                'identifier': nd.nodeid.Identifier,
+                'identifier'
+                ''
+                '': nd.nodeid.Identifier,
                 'parent': nd.get_parent().get_display_name().Text,
                 'value': nd.get_value(),
             }
-    except:
+    except Exception as e:
+        syslog.syslog(syslog.LOG_INFO, e)
         return False
     finally:
-        client.disconnect()
+        disconnect()
 
 
-def write_value(namespace, identifier, value):
+def write_value(namespace, identifier, type, value):
+    syslog.syslog(syslog.LOG_INFO, 'INFO : {} : OPC-ua, write values'.format(datetime.datetime.now()))
+    if not get_status():
+        return False
+    connect()
     try:
-        client.connect()
-        nd = client.get_node("ns={};i={}".format(namespace, identifier))
+        nd = client.get_node("ns={};{}={}".format(namespace, check_type(type), identifier))
         if nd.get_type_definition():
             variant_type = nd.get_data_type_as_variant_type()
             if variant_type == ua.VariantType.Boolean:
-                nd.set_value(False if value == 'False' or value == '0' else True)
+                value = ua.DataValue(ua.Variant(False if value == 'False' or value == '0' or value == 0 else True, ua.VariantType.Boolean))
+                nd.set_value(value)
             elif variant_type == ua.VariantType.String:
-                nd.set_value(str(value))
+                value = ua.DataValue(ua.Variant(value, ua.VariantType.String))
+                a = nd.set_value(value)
             elif variant_type in (ua.VariantType.Float, ua.VariantType.Double):
                 nd.set_value(float(value))
             elif variant_type in (ua.VariantType.Int32, ua.VariantType.Int16, ua.VariantType.Int64):
@@ -172,11 +151,11 @@ def write_value(namespace, identifier, value):
                 'name': nd.get_display_name().Text,
                 'namespace': nd.nodeid.NamespaceIndex,
                 'identifier': nd.nodeid.Identifier,
-                'parent': nd.get_parent().get_display_name().Text,
+                #'parent': nd.get_parent().get_display_name().Text,
                 'value': nd.get_value(),
             }
     except Exception as e:
-        print(e)
+        syslog.syslog(syslog.LOG_INFO, e)
         return False
     finally:
-        client.disconnect()
+        disconnect()

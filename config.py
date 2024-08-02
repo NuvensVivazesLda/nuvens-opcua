@@ -1,16 +1,16 @@
 config = {
-    'MACHINE': 'Embalagem',
+    'MACHINE': 'Embalagem 1',
 
     #SERVER ---------------------------------------------_
-    # 'URL': 'https://nuvens-staging-5143782.dev.odoo.com',
-    'URL': 'http://localhost:8069',
+    'URL': 'https://erp.nuvensvivazes.com',
+    #'URL': 'http://localhost:8069',
     'HEADERS': {'Content-type': 'application/json', "Accept": "application/json"},
-    # "DB": "nuvens-staging-5143782",
-    "DB": "nuvens",
+    "DB": "nuvens-master-5712383",
+    #"DB": "nuv",
 
     # AUTH ----------------------------------------------
-    "LOGIN": "embalagens1_tablet",
-    "PASSWORD": "embalagens1_tablet",
+    "LOGIN": "almofadas1_tablet",
+    "PASSWORD": "`(4]Py#{.*HT;'(x",
     'AUTH_URL': '/web/session/authenticate',
 
     #LONGPOLLING ---------------------------------------
@@ -25,9 +25,8 @@ config = {
     'SET_DEVICE_URL': '/mrp/opc-ua/set-vals',
 
     #OPC-UA CLIENT --------------------------------------
-    # 'OPC_SERVER': "opc.tcp://arxibox:53530/OPCUA/SimulationServer"
-    'OPC_SERVER': "opc.tcp://miguel-Lenovo-Y520-15IKBN:53530/OPCUA/SimulationServer"
-    # 'OPC_SERVER': "opc.tcp://192.168.1.150:4840"
+    #'OPC_SERVER': "opc.tcp://arxibox:53530/OPCUA/SimulationServer"
+    'OPC_SERVER': "opc.tcp://192.168.1.150:4840"
 }
 
 

@@ -4,6 +4,7 @@ import device
 import opc_ua_client
 from config import config
 import json, requests, helpers, time
+import syslog
 
 longpoll_last = config['LONGPOLLING_LAST']
 
@@ -28,22 +29,25 @@ def on_poll(notification):
 
     if type(vals) != bool: #TODO I DON 'T LIKED...
         values_to_send = []
-        print('vals', vals)
+        #print('INFO: New pool message received : ', vals)
         for rec in vals:
             if rec.get('id') > longpoll_last:
                 longpoll_last = rec.get('id')
-                print('INFO: {} : longpolling last message: [ {} ]'.format(datetime.datetime.now(), longpoll_last))
+                syslog.syslog(syslog.LOG_INFO, 'INFO : longpolling last message: [ {} ]'.format(longpoll_last))
                 if rec.get('message').get('payload').get('from') in device.device['listening_devices']:
                     if rec.get('message').get('payload').get('action') == 'data':
                         for item in rec.get('message').get('payload').get('payload'):
-                            print('item', item)
+                            #syslog.syslog(syslog.LOG_INFO, 'item', item)
+                            value = None
                             if item.get('read'):
-                                value = opc_ua_client.read_value(item.get('namespace'), item.get('identifier'))
+                                value = opc_ua_client.read_value(item.get('namespace'), item.get('identifier'), item.get('variable_type'))
                                 values_to_send.append(value)
                             elif item.get('write'):
-                                value = opc_ua_client.write_value(item.get('namespace'), item.get('identifier'), item.get('value'))
+                                value = opc_ua_client.write_value(item.get('namespace'), item.get('identifier'), item.get('variable_type'), item.get('value'))
                                 values_to_send.append(value)
-                        # print('INFO: {} : Updating device data...'.format(datetime.datetime.now()))
+                            if not value:
+                                return False
+                        # syslog.syslog(syslog.LOG_INFO, 'INFO: {} : Updating device data...'.format(datetime.datetime.now()))
                         # device.device_start()
                     elif rec.get('message').get('payload').get('action') == 'refresh':
                         device.device_start()
@@ -56,16 +60,16 @@ def on_poll(notification):
 
 def poll():
     longpolling_is_active= config['LONG_IS_ACTIVE']
-
-    long_result = requests.post(get_poll_url(), data=get_longpolling_params(), timeout=60000, headers=config['HEADERS'])
+    syslog.syslog(syslog.LOG_INFO, 'INFO : New pool connection started...')
     try:
+        long_result = requests.post(get_poll_url(), data=get_longpolling_params(), timeout=60000,
+                                    headers=config['HEADERS'])
         if not on_poll(long_result):
             longpolling_is_active = False
     except Exception as e:
-        print('e')
-        print(e)
-        print('Error while processing _onPoll registering a new _poll request')
+        syslog.syslog(syslog.LOG_INFO, 'ERROR : Error while processing _onPoll registering a new _poll request')
     finally:
+        syslog.syslog(syslog.LOG_INFO, 'INFO : New pool connection ended...')
         if longpolling_is_active:
             poll()
 
