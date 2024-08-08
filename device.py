@@ -1,8 +1,7 @@
 import helpers
 import opc_ua_client
+import requests
 from config import config
-import requests, auth
-import syslog
 
 device = {}
 
@@ -13,10 +12,10 @@ def get_device_url():
     return config['URL'] + config['DEVICE_URL']
 
 def get_cookies():
-    return {'session_id': auth.user['session_id']}
+    return {'session_id': 'session_id'}
 
 def set_device_info():
-    #print(opc_ua_client.node_list)
+    #pretty_log(opc_ua_client.node_list)
     requests.post(set_device_url(), data=helpers.request_prepare({'data': opc_ua_client.node_list}), timeout=60000, headers=config['HEADERS'], cookies=get_cookies())
   
 
@@ -27,8 +26,8 @@ def get_device_info():
 
 def device_start():
     get_device_info()
-    #print('................................')
-    #print(opc_ua_client.get_status())
+    #pretty_log('................................')
+    #pretty_log(opc_ua_client.get_status())
     if opc_ua_client.get_status():
         opc_ua_client.update_values()
         set_device_info()

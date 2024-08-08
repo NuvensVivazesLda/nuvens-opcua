@@ -1,161 +1,61 @@
-import datetime
-import time
-
-import device
-import helpers
+from asyncua import Client as UaClient
 from config import config
-from opcua import Client, ua
-import syslog
-
-client = Client(url=config['OPC_SERVER'])
-
-node_list = []
-opc_connected = False
-
-def start():
-    try:
-        if not get_status():
-            return False
-        syslog.syslog(syslog.LOG_INFO, '------------------------------------------------------')
-        syslog.syslog(syslog.LOG_INFO, 'OPC-UA SERVER [OK]')
-        syslog.syslog(syslog.LOG_INFO, 'SERVER URL: {}'.format(config['OPC_SERVER']))
-        return True
-    except Exception as e:
-        syslog.syslog(syslog.LOG_INFO, e)
-        return False
-
-def connect():
-    global opc_connected
-    try:
-        client.connect()
-        #syslog.syslog(syslog.LOG_INFO, 'INFO : connecting socket opc service...')
-        opc_connected = True
-        return True
-    except:
-        syslog.syslog(syslog.LOG_INFO, 'ERROR: Try connect opc again')
-        time.sleep(1)
-        connect()
-
-def disconnect():
-    try:
-        client.disconnect()
-        #syslog.syslog(syslog.LOG_INFO, 'INFO : disconnecting socket opc service...')
-        opc_connected = False
-    except Exception as e:
-        syslog.syslog(syslog.LOG_INFO, e)
+from pretty_log import pretty_log
+import asyncio
 
 
-def get_status():
-    try:
-        connect()
-        root = client.get_root_node()
-        return root if root else False
-    except Exception as e:
-        syslog.syslog(syslog.LOG_INFO, e)
-        return False
-    finally:
-        disconnect()
+class OPCUAClient:
+    def __init__(self):
+        self.endpoint = config["OPCUA_SERVER_ENDPOINT"]
+        self.namespace = "1"
+        self.client = None
+        self.connected = False
 
-def delete_node_list():
-    global node_list
-    node_list = []
+    async def start(self):
+        pretty_log(f"Connecting to {self.endpoint} ...")
+        try:
+            self.client = UaClient(url=self.endpoint)
+            await self.client.connect()
+            nsidx = await self.client.get_namespace_index(self.namespace)
+            pretty_log(f"Namespace Index for '{self.namespace}': {nsidx}")
+            self.connected = True
 
-def check_type(type):
-    if type and type == 'str':
-        return 's'
-    else:
-        return 'i'
+        except ConnectionRefusedError as e:
+            pretty_log(
+                f"ConnectionRefusedError: Unable to connect to the OPC UA server. Ensure the server is running and the endpoint is correct. Details: {e}"
+            )
+            self.connected = False
+        except asyncio.TimeoutError as e:
+            pretty_log(
+                f"TimeoutError: The connection attempt to the OPC UA server timed out. Details: {e}"
+            )
+            self.connected = False
+        except Exception as e:
+            pretty_log(
+                f"An unexpected error occurred while connecting to the OPC UA server: {e}"
+            )
+            self.connected = False
 
-def update_values():
-    syslog.syslog(syslog.LOG_INFO, 'INFO : OPC-ua, update values')
-    if not get_status():
-        return False
-    delete_node_list()
-    try:
-        connect()
-        for node in device.device['data']:
-            if node.get('namespace') and node.get('identifier'):
-                #syslog.syslog(syslog.LOG_INFO, "ns={};{}={}".format(node.get('namespace'), check_type(node.get('variable_type')), node.get('identifier')))
-                nd = client.get_node("ns={};{}={}".format(node.get('namespace'), check_type(node.get('variable_type')), node.get('identifier')))
-                if nd.get_type_definition():
-                    node_list.append({
-                        'type':       'object' if nd.get_node_class() == ua.NodeClass.Object else 'variable',
-                        'name':       nd.get_display_name().Text,
-                        'namespace':  nd.nodeid.NamespaceIndex,
-                        'identifier': nd.nodeid.Identifier,
-                        #'parent':     nd.get_parent().get_display_name().Text,
-                        'value':      nd.get_value()
-                    })
-                else:
-                    node_list.append({
-                        'type':       None,
-                        'name':       'NODE NOT FOUND...',
-                        'namespace':  node.get('namespace'),
-                        'identifier': node.get('identifier'),
-                        'parent':     None,
-                        'value':      None,
-                    })
-    except Exception as e:
-        syslog.syslog(syslog.LOG_INFO, e)
-        #client.disconnect()
-        return False
-    finally:
-        disconnect()
+    async def config(self, recipe):
+        if not self.connected:
+            raise RuntimeError("Client is not connected. Call start() first.")
 
-def read_value(namespace, identifier, type):
-    syslog.syslog(syslog.LOG_INFO, 'INFO : {} : OPC-ua, read values'.format(datetime.datetime.now()))
-    if not get_status():
-        return False
-    try:
-        connect()
-        nd = client.get_node("ns={};{}={}".format(namespace, check_type(type), identifier))
-        if nd.get_type_definition():
-            return {
-                'type': 'object' if nd.get_node_class() == ua.NodeClass.Object else 'variable',
-                'name': nd.get_display_name().Text,
-                'namespace': nd.nodeid.NamespaceIndex,
-                'identifier'
-                ''
-                '': nd.nodeid.Identifier,
-                'parent': nd.get_parent().get_display_name().Text,
-                'value': nd.get_value(),
-            }
-    except Exception as e:
-        syslog.syslog(syslog.LOG_INFO, e)
-        return False
-    finally:
-        disconnect()
+        pretty_log(f"Configuring recipe: {recipe}")
 
+        try:
+            nsidx = await self.client.get_namespace_index(self.namespace)
+            var_node = await self.client.nodes.root.get_child(
+                f"0:Objects/{nsidx}:MyObject/{nsidx}:MyVariable"
+            )
+            await var_node.write_value(
+                recipe
+            )  # Assuming `recipe` can be written directly
+            pretty_log(f"Recipe configured: {recipe}")
 
-def write_value(namespace, identifier, type, value):
-    syslog.syslog(syslog.LOG_INFO, 'INFO : {} : OPC-ua, write values'.format(datetime.datetime.now()))
-    if not get_status():
-        return False
-    connect()
-    try:
-        nd = client.get_node("ns={};{}={}".format(namespace, check_type(type), identifier))
-        if nd.get_type_definition():
-            variant_type = nd.get_data_type_as_variant_type()
-            if variant_type == ua.VariantType.Boolean:
-                value = ua.DataValue(ua.Variant(False if value == 'False' or value == '0' or value == 0 else True, ua.VariantType.Boolean))
-                nd.set_value(value)
-            elif variant_type == ua.VariantType.String:
-                value = ua.DataValue(ua.Variant(value, ua.VariantType.String))
-                a = nd.set_value(value)
-            elif variant_type in (ua.VariantType.Float, ua.VariantType.Double):
-                nd.set_value(float(value))
-            elif variant_type in (ua.VariantType.Int32, ua.VariantType.Int16, ua.VariantType.Int64):
-                nd.set_value(int(value))
-            return {
-                'type': 'object' if nd.get_node_class() == ua.NodeClass.Object else 'variable',
-                'name': nd.get_display_name().Text,
-                'namespace': nd.nodeid.NamespaceIndex,
-                'identifier': nd.nodeid.Identifier,
-                #'parent': nd.get_parent().get_display_name().Text,
-                'value': nd.get_value(),
-            }
-    except Exception as e:
-        syslog.syslog(syslog.LOG_INFO, e)
-        return False
-    finally:
-        disconnect()
+        except Exception as e:
+            pretty_log(f"An error occurred while configuring the OPC UA server: {e}")
+
+    async def close(self):
+        if self.client:
+            await self.client.disconnect()
+            self.connected = False
